@@ -6,47 +6,58 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Helper to parse JSON that might be wrapped in markdown code blocks or contain extra text.
- * Finds the first valid JSON object in the string.
+ * Uses regex to find the JSON object/array wrapper.
  */
 const cleanAndParseJSON = (text: string) => {
+  if (!text) throw new Error("Empty response from AI");
+
+  // 1. Try simple parse first (best case)
   try {
-    // 1. Try simple parse first
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        // Continue to cleaning strategies
-    }
-
-    // 2. Remove markdown code blocks
-    let cleaned = text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
-    try {
-        return JSON.parse(cleaned);
-    } catch (e) {
-        // Continue to substring strategy
-    }
-
-    // 3. Extract JSON object substring
-    const startIndex = text.indexOf('{');
-    const endIndex = text.lastIndexOf('}');
-    
-    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-      const jsonString = text.substring(startIndex, endIndex + 1);
-      return JSON.parse(jsonString);
-    }
-
-    // 4. Extract JSON array substring (if expected)
-    const startArr = text.indexOf('[');
-    const endArr = text.lastIndexOf(']');
-    if (startArr !== -1 && endArr !== -1 && endArr > startArr) {
-        const jsonString = text.substring(startArr, endArr + 1);
-        return JSON.parse(jsonString);
-    }
-
-    throw new Error("Could not find valid JSON in response");
+    return JSON.parse(text);
   } catch (e) {
-    console.error("JSON Parse Error. Raw text:", text);
-    throw new Error("Invalid response format from AI. Could not parse JSON.");
+    // Continue
   }
+
+  // 2. Extract content from markdown code blocks (```json ... ``` or just ``` ... ```)
+  // This regex matches ``` followed by optional json, captures content, and ends with ```
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
+  const match = text.match(codeBlockRegex);
+  if (match && match[1]) {
+    try {
+      return JSON.parse(match[1]);
+    } catch (e) {
+      // If code block content isn't valid JSON, fall through
+    }
+  }
+
+  // 3. Regex to find the first opening brace '{' or '[' and the last matching '}' or ']'
+  // This is a heuristic: find the first { and the last }
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      const jsonCandidate = text.substring(firstBrace, lastBrace + 1);
+      return JSON.parse(jsonCandidate);
+    } catch (e) {
+      // Continue
+    }
+  }
+
+  const firstBracket = text.indexOf('[');
+  const lastBracket = text.lastIndexOf(']');
+  
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+    try {
+      const jsonCandidate = text.substring(firstBracket, lastBracket + 1);
+      return JSON.parse(jsonCandidate);
+    } catch (e) {
+        // Continue
+    }
+  }
+
+  console.error("JSON Parse Failure. Raw text:", text);
+  throw new Error("Could not extract valid JSON from the AI response.");
 };
 
 /**
@@ -94,10 +105,7 @@ export const generateStoryContent = async (
       },
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No text returned from Gemini");
-    
-    return cleanAndParseJSON(text);
+    return cleanAndParseJSON(response.text || "");
   } catch (error) {
     console.error("Error generating story:", error);
     throw new Error("Failed to generate story. Please try again.");
@@ -149,9 +157,7 @@ export const extractScenes = async (
       },
     });
 
-    const text = response.text;
-    if (!text) return [];
-    return cleanAndParseJSON(text);
+    return cleanAndParseJSON(response.text || "");
   } catch (error) {
     console.error("Error extracting scenes:", error);
     return [];

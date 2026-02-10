@@ -11,7 +11,6 @@ import { Story, Illustration } from '../types';
 const StoryReader: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  // Added addCredits for refund logic
   const { getStory, getChild, updateStory, deductCredits, addCredits, user } = useStore();
   
   // Use local state for UI interactions, but sync with store
@@ -35,13 +34,12 @@ const StoryReader: React.FC = () => {
   const child = getChild(storeStory.childId);
 
   const handleRegenerate = async () => {
-    // Validation
+    // 1. Basic Validation
     if (!storeStory) {
       console.error("Story not found in state");
       return;
     }
     
-    // Explicitly re-fetch child to ensure we have the object
     const currentChild = getChild(storeStory.childId);
     if (!currentChild) {
       alert("Error: Could not find the child profile for this story.");
@@ -53,13 +51,10 @@ const StoryReader: React.FC = () => {
         return;
     }
 
-    const confirm = window.confirm("Regenerate this story? This will create a new version and remove current illustrations.");
-    if (!confirm) return;
-
-    // Scroll to top immediately so user sees the loading state
+    // 2. Start Process - Scroll to top immediately to show loading state
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Deduct credits
+    // 3. Deduct credits
     const success = deductCredits(STORY_COST);
     if (!success) {
       alert("Transaction failed: Not enough credits.");
@@ -69,23 +64,30 @@ const StoryReader: React.FC = () => {
     setIsRegenerating(true);
     
     try {
-        console.log("Regenerating story for:", currentChild.name);
+        console.log("Starting regeneration for story:", storeStory.id);
         
         // Use the existing lesson or fallback
         const lesson = storeStory.lesson || "kindness";
         
+        // 4. Call API
         const generatedContent = await generateStoryContent(currentChild, lesson);
         
+        // 5. Validate Response
+        if (!generatedContent || !generatedContent.paragraphs || !Array.isArray(generatedContent.paragraphs)) {
+            throw new Error("Invalid content received from AI. Structure mismatch.");
+        }
+
+        // 6. Update Store
         const updatedStory: Story = {
             ...storeStory,
-            title: generatedContent.title,
+            title: generatedContent.title || storeStory.title,
             paragraphs: generatedContent.paragraphs,
             illustrations: [], // Reset illustrations as text changed
-            createdAt: Date.now() // Update timestamp
+            createdAt: Date.now() // Update timestamp to force refresh if needed
         };
         
         updateStory(updatedStory);
-        console.log("Story updated successfully");
+        console.log("Story updated successfully in store.");
         
     } catch (e: any) {
         console.error("Regeneration error:", e);
@@ -153,7 +155,7 @@ const StoryReader: React.FC = () => {
         }
       }
 
-      // Update store ONLY after everything is done to prevent re-render glitches during loop
+      // Update store ONLY after everything is done
       if (currentIllustrations.length > 0) {
         const updatedStory = { 
           ...storeStory, 
@@ -196,7 +198,7 @@ const StoryReader: React.FC = () => {
 
       <div className="bg-white rounded-3xl shadow-xl overflow-hidden min-h-[60vh] border border-slate-100 relative">
         
-        {/* Loading Overlay - Using absolute inset-0 on the card, scroll to top ensures visibility */}
+        {/* Loading Overlay */}
         {isLoading && (
           <div className="absolute inset-0 z-50 bg-white/95 flex flex-col items-center justify-center animate-fadeIn backdrop-blur-sm">
             {isGeneratingImages ? (
@@ -213,10 +215,10 @@ const StoryReader: React.FC = () => {
                 <p className="text-sm text-slate-500 mt-2">This usually takes about 20 seconds.</p>
               </>
             ) : (
-               <div className="flex flex-col items-center">
+               <div className="flex flex-col items-center p-6 text-center">
                  <RefreshCw className="animate-spin text-indigo-600 mb-6" size={48}/>
                  <p className="font-bold text-indigo-800 text-xl">Writing a new version...</p>
-                 <p className="text-slate-500 mt-2">Creating a unique story for {child?.name}</p>
+                 <p className="text-slate-500 mt-2 max-w-xs">Using the same lesson: "{storeStory.lesson}"</p>
                </div>
             )}
            

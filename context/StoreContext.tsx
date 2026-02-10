@@ -24,40 +24,73 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('mh_auth') === 'true';
+    try {
+      return localStorage.getItem('mh_auth') === 'true';
+    } catch (e) {
+      return false;
+    }
   });
 
   // Load initial state from local storage or defaults
   const [user, setUser] = useState<User>(() => {
-    const saved = localStorage.getItem('mh_user');
-    return saved ? JSON.parse(saved) : MOCK_USER;
+    try {
+      const saved = localStorage.getItem('mh_user');
+      return saved ? JSON.parse(saved) : MOCK_USER;
+    } catch (e) {
+      return MOCK_USER;
+    }
   });
 
   const [childrenList, setChildrenList] = useState<Child[]>(() => {
-    const saved = localStorage.getItem('mh_children');
-    return saved ? JSON.parse(saved) : SAMPLE_CHILDREN;
+    try {
+      const saved = localStorage.getItem('mh_children');
+      return saved ? JSON.parse(saved) : SAMPLE_CHILDREN;
+    } catch (e) {
+      return SAMPLE_CHILDREN;
+    }
   });
 
   const [stories, setStories] = useState<Story[]>(() => {
-    const saved = localStorage.getItem('mh_stories');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('mh_stories');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
   });
 
   // Persistence Effects
   useEffect(() => {
-    localStorage.setItem('mh_auth', String(isAuthenticated));
+    try {
+      localStorage.setItem('mh_auth', String(isAuthenticated));
+    } catch (e) {
+      console.warn('Failed to save auth state', e);
+    }
   }, [isAuthenticated]);
 
   useEffect(() => {
-    localStorage.setItem('mh_user', JSON.stringify(user));
+    try {
+      localStorage.setItem('mh_user', JSON.stringify(user));
+    } catch (e) {
+      console.warn('Failed to save user', e);
+    }
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('mh_children', JSON.stringify(childrenList));
+    try {
+      localStorage.setItem('mh_children', JSON.stringify(childrenList));
+    } catch (e) {
+      console.warn('Failed to save children', e);
+    }
   }, [childrenList]);
 
   useEffect(() => {
-    localStorage.setItem('mh_stories', JSON.stringify(stories));
+    try {
+      localStorage.setItem('mh_stories', JSON.stringify(stories));
+    } catch (e) {
+      console.error('Failed to save stories. Storage might be full.', e);
+      // In a real app, we might want to notify the user or clean up old stories
+    }
   }, [stories]);
 
   // Auth Actions
